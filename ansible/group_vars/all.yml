@@ -1,0 +1,30 @@
+---
+
+crud_source_repo: "ssh://git@ec2-54-198-58-209.compute-1.amazonaws.com:2222/sahibmartial/crud_appli.git"
+crud_source_branch: "master"
+crud_image_tag_app: "image_frontend"
+crud_image_tag_mysql: "image_mysql"
+image_mysql_scan: "ec2-54-198-58-209.compute-1.amazonaws.com/sahibmartial/cd-crud/image_mysql"
+image_frotend_scan: "ec2-54-198-58-209.compute-1.amazonaws.com/sahibmartial/cd-crud/image_app"
+gitlab_docker_repo: cd-crud
+image_name_database: image_mysql
+image_name_frontend: image_app
+branch: "dev/master"
+home: "/home/centos"
+volume_database: "/srv/db-data"
+
+ip_addr_preprod: "34.238.240.241"
+ip_addr_prod: "54.86.83.164"
+port_app: "8181"
+
+login_app: "{{ vault_login_app  }}"
+password_app: "{{ vault_password_app }}"
+
+#secret data vaulted
+github_private_key: "{{ vault_github_private_key }}"
+docker_hub_login: "{{ vault_docker_hub_login }}"
+docker_hub_email: "{{ vault_docker_hub_email }}"
+docker_hub_password: "{{ vault_docker_hub_password }}"
+dns_addr_server_gitlab: ec2-54-198-58-209.compute-1.amazonaws.com
+gitlab_container_registry_username: "{{ vault_registry_username }}"
+gitlab_container_registry_password: "{{ vault_registry_password }}"

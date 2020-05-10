@@ -1,0 +1,152 @@
+---
+# This playbook is used to deploy crud application based on Docker
+
+# build and push builded images
+
+- name: Log into GitLab Container Registry
+  docker_login:
+    registry: "{{ dns_addr_server_gitlab }}"
+    username: "{{ gitlab_container_registry_username }}"
+    password: "{{ gitlab_container_registry_password }}"
+    reauthorize: yes
+  tags:
+    - build
+
+- name: create project directory
+  file:
+    path: "{{ home }}/application-crud"
+    state: directory
+  tags:
+    - build
+    - preprod
+    - prod
+
+- name: copy devops private key file
+  copy:
+    content: '{{ github_private_key }}'
+    dest: "{{ home }}/.ssh/id_rsa"
+    owner: centos
+  tags:
+    - build
+    - preprod
+    - prod
+
+- name: Retrieve crud addons source code
+  git:
+    repo: "{{ crud_source_repo }}"
+    dest: "{{ home }}/application-crud"
+    accept_hostkey: yes
+    force: yes
+    recursive: no
+    key_file: "{{ home }}/.ssh/id_rsa"
+    version: "{{ crud_source_branch }}"
+  tags:
+    - build
+    - preprod
+    - prod
+
+- name: Build image Frontend
+  docker_image:
+    build:
+      dockerfile: Dockerfile-app
+      path: "{{ home }}/application-crud/"
+       name: ec2-54-198-58-209.compute-1.amazonaws.com/{{ gitlab_container_registry_username }}/{{ gitlab_docker_repo }}/{{ image_name_frontend }}"
+      name: "{{ dns_addr_server_gitlab }}/{{ gitlab_container_registry_username }}/{{ gitlab_docker_repo }}/{{ image_name_frontend }}"
+      push: no
+      tag: "{{ crud_image_tag_app }}"
+  tags:
+    - build
+
+- name: Build api image and push it to Registry
+  docker_image:
+    path: "{{ home }}/application-crud/"
+    name: "{{ dns_addr_server_gitlab }}/{{ gitlab_container_registry_username }}/{{ gitlab_docker_repo }}/{{ image_name_frontend }}"
+    push: yes
+    tag: "{{ crud_image_tag_app }}"
+  tags:
+    - push
+
+- name: Build image mysql
+  docker_image:
+    build:
+      dockerfile: Dockerfile-mysql
+      path: "{{ home }}/application-crud/"
+      name: "{{ dns_addr_server_gitlab }}/{{ gitlab_container_registry_username }}/{{ gitlab_docker_repo }}/{{ image_name_database }}"
+      push: no
+      tag: "{{ crud_image_tag_mysql }}"
+  tags:
+    - build
+
+- name: Push it to Registry
+  docker_image:
+    path: "{{ home }}/application-crud/"
+    name: "{{ dns_addr_server_gitlab }}/{{ gitlab_container_registry_username }}/{{ gitlab_docker_repo }}/{{ image_name_database }}"
+    push: yes
+    tag: "{{ crud_image_tag_mysql }}"
+  tags:
+    - push
+
+
+- name: Remove image on build host
+  docker_image:
+    state: absent
+    name: "{{ dns_addr_server_gitlab }}/{{ gitlab_container_registry_username }}/{{ gitlab_docker_repo }}/{{ image_name_frontend }}"
+    tag: "{{ crud_image_tag_app }}"
+  tags:
+    - build
+
+- name: Remove image on build host
+  docker_image:
+    state: absent
+    name: "{{ dns_addr_server_gitlab }}/{{ gitlab_container_registry_username }}/{{ gitlab_docker_repo }}/{{ image_name_database }}"
+    tag: "{{ crud_image_tag_mysql }}"
+  tags:
+    - build
+
+
+- name: create volume database
+  file:
+    path: "{{ volume_database }}"
+    state: directory
+  tags:
+    - preprod
+    - prod
+
+# docker network
+- name: Create docker network to interconnect containers
+  docker_network:
+    name: crud_phone_books
+  tags:
+    - preprod
+    - prod
+
+# deploy application
+- name: Deploy database
+  docker_container:
+    name: "phonebook-mysql"
+    hostname: "phonebook-mysql"
+    image: "{{ dns_addr_server_gitlab }}/sahibmartial/cd-crud/image_mysql:{{ crud_image_tag_mysql }}"
+    state: "started"
+    restart_policy: 'always'
+    volumes:
+      - "{{ volume_database }}:/var/lib/mysql"
+  tags:
+    - preprod
+    - prod
+
+# deploy frontend
+
+- name: Deploy frontend
+  docker_container:
+    name: "phonebook-app"
+    hostname: "phonebook-app"
+    image: "{{ dns_addr_server_gitlab }}/sahibmartial/cd-crud/image_app:{{ crud_image_tag_app }}"
+    links:
+      - phonebook-mysql
+    state: "started"
+    restart_policy: 'always'
+    ports:
+      - "8181:8181"
+  tags:
+    - preprod
+    - prod

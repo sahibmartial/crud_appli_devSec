@@ -1,0 +1,144 @@
+---
+# This playbook is used to deploy crud application based on Docker
+
+# build and push builded images
+
+- name: Log into DockerHub
+  docker_login:
+    username: "{{ docker_hub_login }}"
+    email: "{{ docker_hub_email }}"
+    password: "{{ docker_hub_password }}"
+  tags:
+    - build
+
+- name: create project directory
+  file:
+    path: "{{ home }}/application-crud"
+    state: directory
+  tags:
+    - build
+    - preprod
+    - prod
+
+- name: copy devops private key file
+  copy:
+    content: '{{ github_private_key }}'
+    dest: "{{ home }}/.ssh/id_rsa"
+    owner: centos
+  tags:
+    - build
+    - preprod
+    - prod
+
+- name: Retrieve crud addons source code
+  git:
+    repo: "{{ crud_source_repo }}"
+    dest: "{{ home }}/application-crud"
+    accept_hostkey: yes
+    force: yes
+    recursive: no
+    key_file: "{{ home }}/.ssh/id_rsa"
+    version: "{{ crud_source_branch }}"
+  tags:
+    - build
+    - preprod
+    - prod
+
+- name: Build image and push it to Docker Hub
+  docker_image:
+    path: "{{ home }}/application-crud/dockerfileapp"
+    name: "{{ docker_hub_login }}/application-crud/image_frontend"
+    tag: "{{ crud_image_tag_app }}"
+  tags:
+    - build
+
+- name: Build api image and push it to Docker Hub
+  docker_image:
+    path: "{{ home }}/application-crud/dockerfileapp"
+    name: "{{ docker_hub_login }}/application-crud/image_frontend"
+    push: yes
+    tag: "{{ crud_image_tag_app }}"
+  tags:
+    - push
+
+- name: Build image and push it to Docker Hub
+  docker_image:
+    path: "{{ home }}/application-crud/dockerfilemysql"
+    name: "{{ docker_hub_login }}/application-crud/image_backend"
+    tag: "{{ crud_image_tag_mysql }}"
+  tags:
+    - build
+
+- name: Build api image and push it to Docker Hub
+  docker_image:
+    path: "{{ home }}/application-crud/dockerfilemysql"
+    name: "{{ docker_hub_login }}/application-crud/image_backend"
+    push: yes
+    tag: "{{ crud_image_tag_mysql }}"
+  tags:
+    - push
+
+
+- name: Remove image on build host
+  docker_image:
+    state: absent
+    name: "{{ docker_hub_login }}/application-crud/image_frontend"
+    tag: "{{ crud_image_tag_app }}"
+  tags:
+    - build
+
+- name: Remove image on build host
+  docker_image:
+    state: absent
+    name: "{{ docker_hub_login }}/application-crud/image_backend"
+    tag: "{{ crud_image_tag_mysql }}"
+  tags:
+    - build
+
+
+- name: create volume database
+  file:
+    path: "{{ volume_database }}"
+    state: directory
+  tags:
+    - preprod
+    - prod
+
+# docker network
+- name: Create docker network to interconnect containers
+  docker_network:
+    name: crud_phone_books
+  tags:
+    - preprod
+    - prod
+
+# deploy application
+- name: Deploy database
+  docker_container:
+    name: "phonebook-mysql"
+    hostname: "phonebook-mysql"
+    image: "{{ docker_hub_login }}/application-crud/image_backend:{{ crud_image_tag_mysql }}"
+    state: "started"
+    restart_policy: 'always'
+    volumes:
+      - "{{ volume_database }}:/var/lib/mysql"
+  tags:
+    - preprod
+    - prod
+
+# deploy frontend
+
+- name: Deploy frontend
+  docker_container:
+    name: "phonebook-app"
+    hostname: "phonebook-app"
+    image: "{{ docker_hub_login }}/application-crud/image_frontend:{{ crud_image_tag_app }}"
+    links:
+      - phonebook-mysql
+    state: "started"
+    restart_policy: 'always'
+    ports:
+      - "8181:8181"
+  tags:
+    - preprod
+    - prod
